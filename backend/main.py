@@ -3,9 +3,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List
 import os
-from document_processor import AdvancedDocumentProcessor
-from embedding_search import AdvancedEmbeddingSearch
-from decision_engine import AdvancedDecisionEngine
+from backend.document_processor import AdvancedDocumentProcessor
+from backend.embedding_search import AdvancedEmbeddingSearch
+from backend.decision_engine import AdvancedDecisionEngine
 import time
 import logging
 
