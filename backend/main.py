@@ -1,23 +1,31 @@
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List
 import os
-from dotenv import load_dotenv
+from document_processor import AdvancedDocumentProcessor
+from embedding_search import AdvancedEmbeddingSearch
+from decision_engine import AdvancedDecisionEngine
+import time
+import logging
 
-# Load environment variables
-load_dotenv()
+app = FastAPI(title="HackRX Document Query System", version="1.0.0")
 
-# Import our custom modules (we'll create these)
-from document_processor import DocumentProcessor
-from embedding_search import DocumentEmbedder
-from decision_engine import DecisionEngine
-
-app = FastAPI(title="HackRX LLM Document Processor", version="1.0.0")
+# CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Initialize components
-doc_processor = DocumentProcessor()
-embedder = DocumentEmbedder()
-decision_engine = DecisionEngine()
+document_processor = AdvancedDocumentProcessor()
+embedding_search = AdvancedEmbeddingSearch()
+decision_engine = AdvancedDecisionEngine()
+
+logging.basicConfig(level=logging.INFO)
 
 class QueryRequest(BaseModel):
     documents: str
@@ -26,43 +34,43 @@ class QueryRequest(BaseModel):
 class QueryResponse(BaseModel):
     answers: List[str]
 
-@app.get("/")
-async def root():
-    return {"message": "HackRX LLM Document Processor API"}
-
-@app.get("/health")
-async def health_check():
-    return {"status": "healthy", "message": "API is running"}
-
 @app.post("/hackrx/run", response_model=QueryResponse)
-async def process_queries(request: QueryRequest):
+async def run_query(request: QueryRequest):
+    """Main endpoint for document query processing"""
+    start_time = time.time()
+    
     try:
-        # Step 1: Download and process document
-        print(f"Processing document: {request.documents}")
-        document_text = doc_processor.download_and_process_pdf(request.documents)
+        # Step 1: Process document
+        doc_data = document_processor.process_document(request.documents)
         
-        # Step 2: Create embeddings for document
-        print("Creating document embeddings...")
-        chunks = doc_processor.chunk_document(document_text)
-        embedder.create_embeddings(chunks)
+        # Step 2: Create embedding index
+        embedding_search.create_index(doc_data['text'])
         
-        # Step 3: Process each question
+        # Step 3: Answer questions
         answers = []
-        for i, question in enumerate(request.questions):
-            print(f"Processing question {i+1}/{len(request.questions)}: {question}")
+        for question in request.questions:
+            # Search for relevant chunks
+            relevant_chunks = embedding_search.search(question, top_k=5)
             
-            # Find relevant chunks
-            relevant_chunks = embedder.search_similar(question, k=3)
-            
-            # Generate answer using LLM
-            answer = decision_engine.generate_answer(question, relevant_chunks)
+            # Generate answer
+            answer = decision_engine.answer_questions([question], relevant_chunks)[0]
             answers.append(answer)
+        
+        processing_time = time.time() - start_time
+        print(f"Processing completed in {processing_time:.2f} seconds")
         
         return QueryResponse(answers=answers)
     
     except Exception as e:
-        print(f"Error processing request: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Processing error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/")
+async def root():
+    return {"message": "Welcome to the HackRX Document Query System API. See /docs for usage."}
+
+@app.get("/health")
+async def health_check():
+    return {"status": "healthy", "message": "HackRX Document Query System is running"}
 
 if __name__ == "__main__":
     import uvicorn
